@@ -40,7 +40,8 @@ class RAGGraph:
         for doc in docs:
             sources.append({
                 "filename": doc.metadata.get("source", "Unknown"),
-                "page": doc.metadata.get("page", "Unknown")
+                "page": doc.metadata.get("page", "Unknown"),
+                "content": doc.page_content
             })
             
         print(f"\n[Retrieved Context from Sources]")
@@ -77,7 +78,7 @@ class RAGGraph:
         validation_result = self.llm.invoke([HumanMessage(content=validation_prompt)])
         is_valid = "VALID" in validation_result.content.upper()
         
-        retry_count = state.get("retry_count", 0)
+        retry_count = state.get("retry_count", 0) 
         
         if not is_valid:
             print(f"Validation failed. Retry count: {retry_count + 1}/{Config.ITERATION_COUNT}")

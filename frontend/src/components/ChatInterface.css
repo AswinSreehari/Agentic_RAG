@@ -212,10 +212,34 @@
 .source-item {
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.03);
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
-  margin-bottom: 0.3rem;
-  display: inline-block;
-  margin-right: 0.5rem;
+  padding: 0.6rem;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  display: block;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.source-meta {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.source-content {
+  font-style: italic;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  opacity: 0.8;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  position: relative;
+}
+
+.source-content:hover {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
 }

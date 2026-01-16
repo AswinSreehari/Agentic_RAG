@@ -97,7 +97,8 @@ const ChatInterface = () => {
                                     <div className="sources-title">Sources:</div>
                                     {msg.sources.map((src, sIdx) => (
                                         <div key={sIdx} className="source-item">
-                                            📄 {src.filename} (Page {src.page})
+                                            <div className="source-meta">📄 {src.filename} (Page {src.page})</div>
+                                            {src.content && <div className="source-content">"{src.content}"</div>}
                                         </div>
                                     ))}
                                 </div>

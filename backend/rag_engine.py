@@ -37,9 +37,4 @@ class RAGService:
         except Exception as e:
             return {"response": f"Error: {str(e)}", "sources": []}
 
-    def clear_memory(self):
-        try:
-            self.vector_store_manager.delete_collection()
-            return "Knowledge base cleared."
-        except Exception as e:
-            return f"Error: {str(e)}"
+  
