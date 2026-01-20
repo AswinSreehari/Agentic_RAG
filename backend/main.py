@@ -36,7 +36,6 @@ async def upload_file(file: UploadFile = File(...)):
     try:
         temp_dir = "temp_uploads"
         os.makedirs(temp_dir, exist_ok=True)
-        
         temp_path = os.path.join(temp_dir, file.filename)
         
         with open(temp_path, "wb") as buffer:
@@ -64,16 +63,6 @@ async def upload_file(file: UploadFile = File(...)):
 async def chat_endpoint(request: ChatRequest):
     try:
         result = rag_service.query(request.message, request.history)
-        
-        print(f"\n--- Chat Query Response ---")
-        print(f"Query: {request.message}")
-        print(f"Response: {result['response']}")
-        if result['sources']:
-            print("Sources:")
-            for source in result['sources']:
-                print(f" - {source['filename']} (Page {source['page']})")
-        print(f"---------------------------\n")
-
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

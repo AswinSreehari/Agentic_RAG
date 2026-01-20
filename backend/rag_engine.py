@@ -26,15 +26,27 @@ class RAGService:
         try:
             final_state = self.rag_graph.run(user_query, chat_history)
             
-            response_text = final_state["response"]
-            if not final_state["is_valid"] and final_state["retry_count"] >= Config.ITERATION_COUNT:
+            response_text = final_state.get("response", "")
+            if not response_text and final_state.get("messages"):
+                from langchain_core.messages import AIMessage
+                for m in reversed(final_state["messages"]):
+                    if isinstance(m, AIMessage) and m.content:
+                        response_text = m.content
+                        break
+            
+            if not final_state.get("is_valid", True) and final_state.get("retry_count", 0) >= Config.ITERATION_COUNT:
                 response_text = "There is no relevant information in the given data"
 
             return {
                 "response": response_text,
-                "sources": final_state["sources"]
+                "sources": final_state.get("sources", [])
             }
         except Exception as e:
             return {"response": f"Error: {str(e)}", "sources": []}
 
-  
+    def clear_memory(self):
+        try:
+            self.vector_store_manager.delete_collection()
+            return "Background knowledge cleared."
+        except Exception as e:
+            return f"Error clearing knowledge: {str(e)}"

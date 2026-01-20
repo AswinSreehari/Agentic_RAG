@@ -15,10 +15,18 @@ class DocumentProcessor:
             
             for i, doc in enumerate(docs):
                 doc.metadata["source"] = original_filename
-                p_val = doc.metadata.get("page")
-                if p_val is None:
-                    p_val = doc.metadata.get("page_label") or doc.metadata.get("page_number")
-                doc.metadata["page"] = p_val if p_val is not None else i
+                
+                page_meta = doc.metadata.get("page")
+                if page_meta is None:
+                    page_meta = doc.metadata.get("page_label") or doc.metadata.get("page_number")
+                
+                if page_meta is not None:
+                    try:
+                        doc.metadata["page"] = int(page_meta) + 1
+                    except:
+                        doc.metadata["page"] = i + 1
+                else:
+                    doc.metadata["page"] = i + 1
 
             chunks = self.text_splitter.split_documents(docs)
             if not chunks:
@@ -26,7 +34,6 @@ class DocumentProcessor:
 
             ids = [str(uuid.uuid4()) for _ in chunks]
             self.vector_store.add_documents(documents=chunks, ids=ids)
-            
             return f"Successfully processed {original_filename}."
         except Exception as e:
             return f"Error processing PDF: {str(e)}"

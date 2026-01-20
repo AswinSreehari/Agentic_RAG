@@ -1,4 +1,6 @@
-from typing import List, TypedDict, Optional
+from typing import List, TypedDict, Optional, Annotated, Sequence
+import operator
+from langchain_core.messages import BaseMessage
 
 class AgentState(TypedDict):
     query: str
@@ -7,5 +9,6 @@ class AgentState(TypedDict):
     response: str
     is_valid: bool
     retry_count: int
-    sources: List[dict]  
+    sources: List[dict]
     fallback_message: str
+    messages: Annotated[Sequence[BaseMessage], operator.add]

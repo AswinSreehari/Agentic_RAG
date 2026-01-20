@@ -6,9 +6,12 @@ import './ChatInterface.css';
 const API_BASE = "http://localhost:8000";
 
 const ChatInterface = () => {
-    const [messages, setMessages] = useState([
-        { role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }
-    ]);
+    const [messages, setMessages] = useState(() => {
+        const saved = localStorage.getItem('chat_history');
+        return saved ? JSON.parse(saved) : [
+            { role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }
+        ];
+    });
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef(null);
@@ -20,6 +23,7 @@ const ChatInterface = () => {
 
     useEffect(() => {
         scrollToBottom();
+        localStorage.setItem('chat_history', JSON.stringify(messages));
     }, [messages]);
 
     const handleSend = async () => {
@@ -40,10 +44,13 @@ const ChatInterface = () => {
                 history: history
             });
 
+            const content = response.data.response || "No response received";
+            const sources = response.data.sources || [];
+
             const aiMsg = {
                 role: 'assistant',
-                content: response.data.response,
-                sources: response.data.sources
+                content: content,
+                sources: sources
             };
             setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
@@ -71,7 +78,6 @@ const ChatInterface = () => {
         } catch (error) {
             setMessages(prev => [...prev, { role: 'system', content: `❌ Error uploading ${file.name}` }]);
         }
-        // clear input
         e.target.value = null;
     };
 
