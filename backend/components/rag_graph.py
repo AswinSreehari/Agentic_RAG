@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from .state import AgentState
 from .config import Config
@@ -42,9 +43,11 @@ class RAGGraph:
                 "Constraint: FINAL_ANSWER must be clean, grounded in context, and have NO inline citations."
             )))
         res = self.llm.invoke(messages)
-        return {"messages": [res]}
+        return {"messages": [res], "steps": state.get("steps", 0) + 1}
 
     def _tool_executor(self, state: AgentState):
+        if state.get("steps", 0) > 10: 
+             return {"messages": [SystemMessage(content="Step limit reached. Please output FINAL_ANSWER based on what you have found so far. Do not search anymore.")]}
         last_msg = state["messages"][-1].content
         match = re.search(r'ACTION:\s*search_documents\("(.*)"\)', last_msg)
         if match:
@@ -106,8 +109,8 @@ class RAGGraph:
         workflow.add_conditional_edges("agent", self._router, {"action": "action", "validate": "validate"})
         workflow.add_edge("action", "agent")
         workflow.add_conditional_edges("validate", self._retry_logic, {"agent": "agent", "end": END})
-        return workflow.compile()
-
+        return workflow.compile(checkpointer=MemorySaver())
+ 
     def run(self, query: str, chat_history: list):
         msgs = []
         for m in chat_history:
@@ -120,3 +123,14 @@ class RAGGraph:
             final["response"] = "There is no relevant information in the given data"
             final["sources"] = []
         return final
+
+    def run_stream(self, query: str, chat_history: list, thread_id: str = "default"):
+        msgs = []
+        for m in chat_history:
+            if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
+            else: msgs.append(AIMessage(content=m["content"]))
+        msgs.append(HumanMessage(content=query))
+        init = {"query": query, "messages": msgs, "context": "", "response": "", "is_valid": False, "retry_count": 0, "sources": []}
+        
+        config = {"configurable": {"thread_id": thread_id}}
+        return self.graph.stream(init, config=config)

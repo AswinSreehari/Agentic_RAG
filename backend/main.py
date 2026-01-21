@@ -1,6 +1,7 @@
 import os
 import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -66,6 +67,10 @@ async def chat_endpoint(request: ChatRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat_stream")
+async def chat_stream_endpoint(request: ChatRequest):
+    return StreamingResponse(rag_service.query_stream(request.message, request.history), media_type="text/event-stream")
 
 @app.post("/reset")
 def reset_db():

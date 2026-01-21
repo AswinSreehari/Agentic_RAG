@@ -113,15 +113,125 @@
 }
 
 .input-area {
-  padding: 1.25rem;
-  background: rgba(22, 27, 34, 0.9);
+  padding: 0.5rem;
+  background: rgba(22, 27, 34, 0.95);
   border-top: 1px solid var(--border-color);
   display: flex;
-  gap: 1rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   backdrop-filter: blur(10px);
 }
 
+.input-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  width: 100%;
+}
+
+/* Thinking Stream UI */
+.thinking-container {
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.thinking-header {
+  padding: 0.6rem 1rem;
+  background: #161b22;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.2s;
+}
+
+.thinking-header:hover {
+  background: #1f2937;
+  color: var(--text-primary);
+}
+
+.thinking-indicator {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 12px;
+  background: #374151;
+  color: #9ca3af;
+}
+
+.thinking-indicator.pulsing {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.thinking-title {
+  flex: 1;
+}
+
+.thinking-toggle {
+  opacity: 0.5;
+}
+
+.thinking-content {
+  padding: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-color);
+  font-family: 'Consolas', 'Monaco', monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-item {
+  display: flex;
+  gap: 0.8rem;
+  line-height: 1.4;
+}
+
+.log-label {
+  font-size: 0.7rem;
+  font-weight: bold;
+  min-width: 80px;
+  text-align: right;
+  padding-top: 0.1rem;
+}
+
+.log-item.thought .log-label { color: #9ca3af; }
+.log-item.action .log-label { color: #f59e0b; }
+.log-item.observation .log-label { color: #10b981; }
+.log-item.conclusion .log-label { color: #8b5cf6; }
+
+.log-text {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.thinking-cursor::after {
+  content: '▋';
+  display: inline-block;
+  color: var(--accent);
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* Existing Input Styles */
 .input-area input[type="text"] {
   flex: 1;
   background: #0d1117;

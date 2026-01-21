@@ -4,6 +4,9 @@ from components.llm import LLMFactory
 from components.vector_store import VectorStoreManager
 from components.document_processor import DocumentProcessor
 from components.rag_graph import RAGGraph
+import json
+import uuid
+from langchain_core.messages import AIMessage
 
 class RAGService:
     def __init__(self):
@@ -50,3 +53,54 @@ class RAGService:
             return "Background knowledge cleared."
         except Exception as e:
             return f"Error clearing knowledge: {str(e)}"
+
+    def query_stream(self, user_query: str, chat_history: List[dict] = []):
+        
+        if not self.llm or not self.rag_graph:
+            yield json.dumps({"type": "error", "content": "System Error: LLM not initialized."}) + "\n"
+            return
+
+        try:
+            thread_id = str(uuid.uuid4())
+            stream = self.rag_graph.run_stream(user_query, chat_history, thread_id=thread_id)
+            
+            final_response = ""
+            final_sources = []
+            is_valid = False
+            retry_count = 0
+            
+            for event in stream:
+                for node, values in event.items():
+                    if "messages" in values:
+                        for m in values["messages"]:
+                            if isinstance(m, AIMessage) and m.content:
+                                print(f"[THINKING]: {m.content}")
+                                yield json.dumps({"type": "thinking", "content": m.content}) + "\n"
+                    
+                    if "response" in values:
+                         final_response = values["response"]
+                    
+                    if "sources" in values:
+                         final_sources = values["sources"]
+                    
+                    if "is_valid" in values:
+                         is_valid = values["is_valid"]
+                    
+                    if "retry_count" in values:
+                         retry_count = values["retry_count"]
+            
+            if not is_valid and retry_count >= Config.ITERATION_COUNT:
+                final_response = "There is no relevant information in the given data to answer your query accurately."
+            
+            if not final_response:
+                final_response = "I couldn't generate a response."
+
+            print(f"[FINAL]: {final_response}")
+            yield json.dumps({
+                "type": "final",
+                "response": final_response,
+                "sources": final_sources
+            }) + "\n"
+
+        except Exception as e:
+            yield json.dumps({"type": "error", "content": str(e)}) + "\n"

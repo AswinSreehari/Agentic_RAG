@@ -12,3 +12,4 @@ class AgentState(TypedDict):
     sources: List[dict]
     fallback_message: str
     messages: Annotated[Sequence[BaseMessage], operator.add]
+    steps: int

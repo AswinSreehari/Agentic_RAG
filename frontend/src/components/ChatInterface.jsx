@@ -1,19 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { FaPaperclip, FaArrowUp } from 'react-icons/fa';
+import { FaPaperclip, FaArrowUp, FaTrash } from 'react-icons/fa';
 import './ChatInterface.css';
 
 const API_BASE = "http://localhost:8000";
 
 const ChatInterface = () => {
     const [messages, setMessages] = useState(() => {
-        const saved = localStorage.getItem('chat_history');
-        return saved ? JSON.parse(saved) : [
-            { role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }
-        ];
+        try {
+            const saved = localStorage.getItem('chat_history');
+            const parsed = saved ? JSON.parse(saved) : [];
+            const valid = parsed.filter(m => m && m.content);
+            return valid.length > 0 ? valid : [
+                { role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }
+            ];
+        } catch (e) {
+            console.error("Failed to load history", e);
+            return [{ role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }];
+        }
     });
+    
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [currentStatus, setCurrentStatus] = useState("");
+    const [isThinking, setIsThinking] = useState(false);
     const fileInputRef = useRef(null);
     const messagesEndRef = useRef(null);
 
@@ -33,24 +43,68 @@ const ChatInterface = () => {
         setMessages(prev => [...prev, userMsg]);
         setInput("");
         setIsLoading(true);
+        setIsLoading(true);
+        setIsThinking(true);
+        setCurrentStatus("Starting...");
 
         try {
             const history = messages
-                .filter(m => m.role !== 'system')
+                .filter(m => m.role !== 'system' && m.content)  
                 .map(m => ({ role: m.role, content: m.content }));
 
-            const response = await axios.post(`${API_BASE}/chat`, {
-                message: userMsg.content,
-                history: history
+            const response = await fetch(`${API_BASE}/chat_stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: userMsg.content, history })
             });
 
-            const content = response.data.response || "No response received";
-            const sources = response.data.sources || [];
+            if (!response.body) throw new Error("ReadableStream not supported");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalRes = "";
+            let finalSrc = [];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.type === 'thinking') {
+                            let status = data.content;
+                            if (status.includes("ACTION:")) status = "Searching documents..."; 
+                            else if (status.includes("OBSERVATION:")) status = "Found results...";  
+                            else if (status.includes("FINAL_ANSWER:")) status = "Answering...";
+                             
+                            if (data.content.includes("search_documents")) setCurrentStatus("Searching documents...");
+                            else if (data.content.includes("OBSERVATION")) setCurrentStatus("Found results...");
+                            else setCurrentStatus("Analyzing...");
+
+                        } else if (data.type === 'final') {
+                            finalRes = data.response;
+                            finalSrc = data.sources;
+                            setCurrentStatus("Finished");
+                        } else if (data.type === 'error') {
+                            console.error("Stream Error:", data.content);
+                        }
+                    } catch (e) {
+                        console.error("Error parsing JSON:", e);
+                    }
+                }
+            }
 
             const aiMsg = {
                 role: 'assistant',
-                content: content,
-                sources: sources
+                content: finalRes || "I couldn't generate a response. Please try again.",
+                sources: finalSrc
             };
             setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
@@ -58,6 +112,15 @@ const ChatInterface = () => {
             console.error(error);
         } finally {
             setIsLoading(false);
+            setIsThinking(false);
+        }
+    };
+
+    const handleClearChat = () => {
+        if (window.confirm("Are you sure you want to clear the chat history?")) {
+            const initialmsg = [{ role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }];
+            setMessages(initialmsg);
+            localStorage.setItem('chat_history', JSON.stringify(initialmsg));
         }
     };
 
@@ -89,6 +152,9 @@ const ChatInterface = () => {
                     <h2>RAG Agent</h2>
                     <span className="status">Online</span>
                 </div>
+                <button className="icon-btn" onClick={handleClearChat} title="Clear Chat" style={{ marginLeft: 'auto' }}>
+                    <FaTrash />
+                </button>
             </div>
 
             <div className="messages-area">
@@ -123,25 +189,51 @@ const ChatInterface = () => {
             </div>
 
             <div className="input-area">
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    style={{ display: 'none' }}
-                />
-                <button className="icon-btn" onClick={() => fileInputRef.current.click()} title="Upload File">
-                    <FaPaperclip />
-                </button>
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Type your message here..."
-                />
-                <button className="send-btn" onClick={handleSend} disabled={!input.trim()}>
-                    <FaArrowUp />
-                </button>
+                {isThinking && currentStatus && (
+                    <div className="thinking-status" style={{
+                        marginBottom: '10px',
+                        padding: '0 10px',
+                        color: '#9ca3af',
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        <div className="spinner" style={{
+                            width: '12px',
+                            height: '12px',
+                            border: '2px solid rgba(156, 163, 175, 0.3)',
+                            borderTop: '2px solid #9ca3af',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                        }}></div>
+                        <span>{currentStatus}</span>
+                        <style>{`
+                            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        `}</style>
+                    </div>
+                )}
+                <div className="input-row">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        style={{ display: 'none' }}
+                    />
+                    <button className="icon-btn" onClick={() => fileInputRef.current.click()} title="Upload File">
+                        <FaPaperclip />
+                    </button>
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder="Type your message here..."
+                    />
+                    <button className="send-btn" onClick={handleSend} disabled={!input.trim()}>
+                        <FaArrowUp />
+                    </button>
+                </div>
             </div>
         </div>
     );
