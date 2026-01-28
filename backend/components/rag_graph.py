@@ -13,12 +13,35 @@ class RAGGraph:
         self.graph = self._build_graph()
 
     def _retrieve_docs(self, query: str):
-        retriever = self.vector_store.as_retriever(search_kwargs={"k": 5})
+        # Fetch more candidates to ensure diversity
+        retriever = self.vector_store.as_retriever(search_kwargs={"k": 20})
         docs = retriever.invoke(query)
+        
+        # Group documents by source
+        grouped_docs = {}
+        for d in docs:
+            source = d.metadata.get("source", "Unknown")
+            if source not in grouped_docs:
+                grouped_docs[source] = []
+            grouped_docs[source].append(d)
+            
+        # Interleave documents from different sources
+        selected_docs = []
+        max_docs_per_source = max(len(v) for v in grouped_docs.values()) if grouped_docs else 0
+        
+        for i in range(max_docs_per_source):
+            for source in grouped_docs:
+                if i < len(grouped_docs[source]):
+                    selected_docs.append(grouped_docs[source][i])
+                    
+        # Limit to top 5 chunks after diversity filtering
+        selected_docs = selected_docs[:5]
+
         sources = []
         unique_contents = set()
         context = ""
-        for d in docs:
+        
+        for d in selected_docs:
             txt = d.page_content.strip()
             if not txt or txt in unique_contents: continue
             unique_contents.add(txt)
@@ -30,6 +53,7 @@ class RAGGraph:
             s = {"filename": d.metadata.get("source", "Unknown"), "page": p, "content": txt}
             sources.append(s)
             context += f"\n[File: {s['filename']}, Page: {s['page']}]\n{txt}\n"
+            
         return {"context": context, "sources": sources}
 
     def _agent(self, state: AgentState):
@@ -111,25 +135,23 @@ class RAGGraph:
         workflow.add_conditional_edges("validate", self._retry_logic, {"agent": "agent", "end": END})
         return workflow.compile(checkpointer=MemorySaver())
  
-    def run(self, query: str, chat_history: list):
-        msgs = []
-        for m in chat_history:
-            if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
-            else: msgs.append(AIMessage(content=m["content"]))
-        msgs.append(HumanMessage(content=query))
+    def run(self, query: str, chat_history: list, thread_id: str = "default"):
+        # Relies on internal graph memory (MemorySaver) for history.
+        # We only pass the new HumanMessage.
+        msgs = [HumanMessage(content=query)]
         init = {"query": query, "messages": msgs, "context": "", "response": "", "is_valid": False, "retry_count": 0, "sources": []}
-        final = self.graph.invoke(init)
+        
+        config = {"configurable": {"thread_id": thread_id}}
+        final = self.graph.invoke(init, config=config)
         if not final.get("is_valid") and final.get("retry_count", 0) >= Config.ITERATION_COUNT:
             final["response"] = "There is no relevant information in the given data"
             final["sources"] = []
         return final
 
     def run_stream(self, query: str, chat_history: list, thread_id: str = "default"):
-        msgs = []
-        for m in chat_history:
-            if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
-            else: msgs.append(AIMessage(content=m["content"]))
-        msgs.append(HumanMessage(content=query))
+        # Relies on internal graph memory (MemorySaver) for history.
+        # We only pass the new HumanMessage.
+        msgs = [HumanMessage(content=query)]
         init = {"query": query, "messages": msgs, "context": "", "response": "", "is_valid": False, "retry_count": 0, "sources": []}
         
         config = {"configurable": {"thread_id": thread_id}}

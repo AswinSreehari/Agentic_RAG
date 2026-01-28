@@ -6,6 +6,7 @@ import './ChatInterface.css';
 const API_BASE = "http://localhost:8000";
 
 const ChatInterface = () => {
+    const [conversationId, setConversationId] = useState(() => localStorage.getItem('chat_conversation_id') || null);
     const [messages, setMessages] = useState(() => {
         try {
             const saved = localStorage.getItem('chat_history');
@@ -19,7 +20,7 @@ const ChatInterface = () => {
             return [{ role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }];
         }
     });
-    
+
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [currentStatus, setCurrentStatus] = useState("");
@@ -36,6 +37,12 @@ const ChatInterface = () => {
         localStorage.setItem('chat_history', JSON.stringify(messages));
     }, [messages]);
 
+    useEffect(() => {
+        if (conversationId) {
+            localStorage.setItem('chat_conversation_id', conversationId);
+        }
+    }, [conversationId]);
+
     const handleSend = async () => {
         if (!input.trim()) return;
 
@@ -43,19 +50,24 @@ const ChatInterface = () => {
         setMessages(prev => [...prev, userMsg]);
         setInput("");
         setIsLoading(true);
-        setIsLoading(true);
         setIsThinking(true);
         setCurrentStatus("Starting...");
 
         try {
             const history = messages
-                .filter(m => m.role !== 'system' && m.content)  
+                .filter(m => m.role !== 'system' && m.content)
                 .map(m => ({ role: m.role, content: m.content }));
 
-            const response = await fetch(`${API_BASE}/chat_stream`, {
+            const response = await fetch(`${API_BASE}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: userMsg.content, history })
+                body: JSON.stringify({
+                    username: "User", // Can be dynamic if needed
+                    query: userMsg.content,
+                    history,
+                    conversation_id: conversationId,
+                    stream: true
+                })
             });
 
             if (!response.body) throw new Error("ReadableStream not supported");
@@ -80,17 +92,20 @@ const ChatInterface = () => {
                         const data = JSON.parse(line);
                         if (data.type === 'thinking') {
                             let status = data.content;
-                            if (status.includes("ACTION:")) status = "Searching documents..."; 
-                            else if (status.includes("OBSERVATION:")) status = "Found results...";  
+                            if (status.includes("ACTION:")) status = "Searching documents...";
+                            else if (status.includes("OBSERVATION:")) status = "Found results...";
                             else if (status.includes("FINAL_ANSWER:")) status = "Answering...";
-                             
+
                             if (data.content.includes("search_documents")) setCurrentStatus("Searching documents...");
                             else if (data.content.includes("OBSERVATION")) setCurrentStatus("Found results...");
                             else setCurrentStatus("Analyzing...");
 
                         } else if (data.type === 'final') {
                             finalRes = data.response;
-                            finalSrc = data.sources;
+                            finalSrc = data.sources || []; // Ensure it's empty array if null
+                            if (data.conversation_id) {
+                                setConversationId(data.conversation_id);
+                            }
                             setCurrentStatus("Finished");
                         } else if (data.type === 'error') {
                             console.error("Stream Error:", data.content);
@@ -120,7 +135,9 @@ const ChatInterface = () => {
         if (window.confirm("Are you sure you want to clear the chat history?")) {
             const initialmsg = [{ role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }];
             setMessages(initialmsg);
+            setConversationId(null);
             localStorage.setItem('chat_history', JSON.stringify(initialmsg));
+            localStorage.removeItem('chat_conversation_id');
         }
     };
 

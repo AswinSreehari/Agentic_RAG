@@ -25,8 +25,11 @@ app.add_middleware(
 rag_service = RAGService()
 
 class ChatRequest(BaseModel):
-    message: str
+    username: str = "User"
+    query: str
     history: Optional[List[dict]] = []
+    conversation_id: Optional[str] = None
+    stream: bool = False
 
 @app.get("/")
 def read_root():
@@ -63,14 +66,16 @@ async def upload_file(file: UploadFile = File(...)):
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
-        result = rag_service.query(request.message, request.history)
-        return result
+        if request.stream:
+            return StreamingResponse(
+                rag_service.query_stream(request.query, request.history, request.conversation_id), 
+                media_type="text/event-stream"
+            )
+        else:
+            result = rag_service.query(request.query, request.history, request.conversation_id)
+            return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/chat_stream")
-async def chat_stream_endpoint(request: ChatRequest):
-    return StreamingResponse(rag_service.query_stream(request.message, request.history), media_type="text/event-stream")
 
 @app.post("/reset")
 def reset_db():

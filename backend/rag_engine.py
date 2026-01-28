@@ -7,6 +7,7 @@ from components.rag_graph import RAGGraph
 import json
 import uuid
 from langchain_core.messages import AIMessage
+ 
 
 class RAGService:
     def __init__(self):
@@ -22,16 +23,18 @@ class RAGService:
     def ingest_file(self, file_path: str, original_filename: str) -> str:
         return self.doc_processor.process_pdf(file_path, original_filename)
 
-    def query(self, user_query: str, chat_history: List[dict] = []) -> dict:
+    def query(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None) -> dict:
         if not self.llm or not self.rag_graph:
-            return {"response": "System Error: LLM not initialized.", "sources": []}
+            return {"response": "System Error: LLM not initialized.", "sources": [], "conversation_id": conversation_id}
+
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
 
         try:
-            final_state = self.rag_graph.run(user_query, chat_history)
+            final_state = self.rag_graph.run(user_query, chat_history, thread_id=conversation_id)
             
             response_text = final_state.get("response", "")
             if not response_text and final_state.get("messages"):
-                from langchain_core.messages import AIMessage
                 for m in reversed(final_state["messages"]):
                     if isinstance(m, AIMessage) and m.content:
                         response_text = m.content
@@ -42,10 +45,11 @@ class RAGService:
 
             return {
                 "response": response_text,
-                "sources": final_state.get("sources", [])
+                "sources": final_state.get("sources", []),
+                "conversation_id": conversation_id
             }
         except Exception as e:
-            return {"response": f"Error: {str(e)}", "sources": []}
+            return {"response": f"Error: {str(e)}", "sources": [], "conversation_id": conversation_id}
 
     def clear_memory(self):
         try:
@@ -54,15 +58,17 @@ class RAGService:
         except Exception as e:
             return f"Error clearing knowledge: {str(e)}"
 
-    def query_stream(self, user_query: str, chat_history: List[dict] = []):
+    def query_stream(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None):
         
         if not self.llm or not self.rag_graph:
             yield json.dumps({"type": "error", "content": "System Error: LLM not initialized."}) + "\n"
             return
+        
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
 
         try:
-            thread_id = str(uuid.uuid4())
-            stream = self.rag_graph.run_stream(user_query, chat_history, thread_id=thread_id)
+            stream = self.rag_graph.run_stream(user_query, chat_history, thread_id=conversation_id)
             
             final_response = ""
             final_sources = []
@@ -86,7 +92,7 @@ class RAGService:
                     if "is_valid" in values:
                          is_valid = values["is_valid"]
                     
-                    if "retry_count" in values:
+                    if "retry_count" in values: 
                          retry_count = values["retry_count"]
             
             if not is_valid and retry_count >= Config.ITERATION_COUNT:
@@ -99,7 +105,8 @@ class RAGService:
             yield json.dumps({
                 "type": "final",
                 "response": final_response,
-                "sources": final_sources
+                "sources": final_sources,
+                "conversation_id": conversation_id
             }) + "\n"
 
         except Exception as e:
