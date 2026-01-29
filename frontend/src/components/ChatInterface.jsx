@@ -62,7 +62,7 @@ const ChatInterface = () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    username: "User", // Can be dynamic if needed
+                    username: "User",
                     query: userMsg.content,
                     history,
                     conversation_id: conversationId,
@@ -181,13 +181,13 @@ const ChatInterface = () => {
                         <div className={`message-bubble ${msg.role}`}>
                             <div className="content">{msg.role === 'system' ? <span className="system-msg">{msg.content}</span> : msg.content}</div>
 
-                            {msg.sources && msg.sources.length > 0 && (
+                            {msg.sources && Array.isArray(msg.sources) && msg.sources.length > 0 && (
                                 <div className="sources-container">
                                     <div className="sources-title">Sources:</div>
                                     {msg.sources.map((src, sIdx) => (
                                         <div key={sIdx} className="source-item">
-                                            <div className="source-meta">📄 {src.filename} (Page {src.page})</div>
-                                            {src.content && <div className="source-content">"{src.content}"</div>}
+                                            <div className="source-meta">📄 {src.filename || "Unknown"} (Page {src.page || "?"})</div>
+                                            {src.content && <div className="source-content">"{src.content.substring(0, 150)}..."</div>}
                                         </div>
                                     ))}
                                 </div>

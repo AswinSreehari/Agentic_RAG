@@ -68,19 +68,15 @@ async def chat_endpoint(request: ChatRequest):
     try:
         if request.stream:
             return StreamingResponse(
-                rag_service.query_stream(request.query, request.history, request.conversation_id), 
+                rag_service.query_stream(request.query, request.history, request.conversation_id, request.username), 
                 media_type="text/event-stream"
             )
         else:
-            result = rag_service.query(request.query, request.history, request.conversation_id)
+            result = rag_service.query(request.query, request.history, request.conversation_id, request.username)
             return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/reset")
-def reset_db():
-    result = rag_service.clear_memory()
-    return {"status": "success", "message": result}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

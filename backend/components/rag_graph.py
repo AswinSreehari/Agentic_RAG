@@ -58,9 +58,11 @@ class RAGGraph:
 
     def _agent(self, state: AgentState):
         messages = list(state["messages"])
+        username = state.get("username", "User")
+        
         if not any(isinstance(m, SystemMessage) for m in messages):
             messages.insert(0, SystemMessage(content=(
-                "You are an expert ReAct Agent. To answer, you MUST search documents first. "
+                f"You are an expert ReAct Agent assisting {username}. To answer, you MUST search documents first. "
                 "Current Strategy: \n"
                 "1. If you need info (which you usually do), output: ACTION: search_documents(\"query\")\n"
                 "2. If you have sufficient info from OBSERVATIONS, output: FINAL_ANSWER: your clean response\n"
@@ -133,26 +135,49 @@ class RAGGraph:
         workflow.add_conditional_edges("agent", self._router, {"action": "action", "validate": "validate"})
         workflow.add_edge("action", "agent")
         workflow.add_conditional_edges("validate", self._retry_logic, {"agent": "agent", "end": END})
-        return workflow.compile(checkpointer=MemorySaver())
+        return workflow.compile()
  
-    def run(self, query: str, chat_history: list, thread_id: str = "default"):
-        # Relies on internal graph memory (MemorySaver) for history.
-        # We only pass the new HumanMessage.
-        msgs = [HumanMessage(content=query)]
-        init = {"query": query, "messages": msgs, "context": "", "response": "", "is_valid": False, "retry_count": 0, "sources": []}
+    def run(self, query: str, chat_history: list, username: str = "User", thread_id: str = "default"):
+        msgs = []
+        for m in chat_history:
+            if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
+            elif m.get("role") == "assistant": msgs.append(AIMessage(content=m["content"]))
+            
+        msgs.append(HumanMessage(content=query))
+        init = {
+            "query": query, 
+            "messages": msgs, 
+            "context": "", 
+            "response": "", 
+            "is_valid": False, 
+            "retry_count": 0, 
+            "sources": [],
+            "username": username
+        }
         
-        config = {"configurable": {"thread_id": thread_id}}
-        final = self.graph.invoke(init, config=config)
+        final = self.graph.invoke(init)
+        
         if not final.get("is_valid") and final.get("retry_count", 0) >= Config.ITERATION_COUNT:
             final["response"] = "There is no relevant information in the given data"
             final["sources"] = []
         return final
 
-    def run_stream(self, query: str, chat_history: list, thread_id: str = "default"):
-        # Relies on internal graph memory (MemorySaver) for history.
-        # We only pass the new HumanMessage.
-        msgs = [HumanMessage(content=query)]
-        init = {"query": query, "messages": msgs, "context": "", "response": "", "is_valid": False, "retry_count": 0, "sources": []}
+    def run_stream(self, query: str, chat_history: list, username: str = "User", thread_id: str = "default"):
+        msgs = []
+        for m in chat_history:
+            if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
+            elif m.get("role") == "assistant": msgs.append(AIMessage(content=m["content"]))
+            
+        msgs.append(HumanMessage(content=query))
+        init = {
+            "query": query, 
+            "messages": msgs, 
+            "context": "", 
+            "response": "", 
+            "is_valid": False, 
+            "retry_count": 0, 
+            "sources": [],
+            "username": username
+        }
         
-        config = {"configurable": {"thread_id": thread_id}}
-        return self.graph.stream(init, config=config)
+        return self.graph.stream(init)

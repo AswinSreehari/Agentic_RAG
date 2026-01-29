@@ -19,11 +19,11 @@ class RAGService:
             self.rag_graph = RAGGraph(self.llm, self.vector_store_manager.vector_store)
         else:
             self.rag_graph = None
-
+    
     def ingest_file(self, file_path: str, original_filename: str) -> str:
         return self.doc_processor.process_pdf(file_path, original_filename)
 
-    def query(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None) -> dict:
+    def query(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None, username: str = "User") -> dict:
         if not self.llm or not self.rag_graph:
             return {"response": "System Error: LLM not initialized.", "sources": [], "conversation_id": conversation_id}
 
@@ -31,10 +31,11 @@ class RAGService:
             conversation_id = str(uuid.uuid4())
 
         try:
-            final_state = self.rag_graph.run(user_query, chat_history, thread_id=conversation_id)
+            final_state = self.rag_graph.run(user_query, chat_history, username=username, thread_id=conversation_id)
             
             response_text = final_state.get("response", "")
             if not response_text and final_state.get("messages"):
+                from langchain_core.messages import AIMessage
                 for m in reversed(final_state["messages"]):
                     if isinstance(m, AIMessage) and m.content:
                         response_text = m.content
@@ -58,7 +59,7 @@ class RAGService:
         except Exception as e:
             return f"Error clearing knowledge: {str(e)}"
 
-    def query_stream(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None):
+    def query_stream(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None, username: str = "User"):
         
         if not self.llm or not self.rag_graph:
             yield json.dumps({"type": "error", "content": "System Error: LLM not initialized."}) + "\n"
@@ -68,7 +69,7 @@ class RAGService:
             conversation_id = str(uuid.uuid4())
 
         try:
-            stream = self.rag_graph.run_stream(user_query, chat_history, thread_id=conversation_id)
+            stream = self.rag_graph.run_stream(user_query, chat_history, username=username, thread_id=conversation_id)
             
             final_response = ""
             final_sources = []
