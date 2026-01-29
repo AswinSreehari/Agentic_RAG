@@ -13,11 +13,9 @@ class RAGGraph:
         self.graph = self._build_graph()
 
     def _retrieve_docs(self, query: str):
-        # Fetch more candidates to ensure diversity
         retriever = self.vector_store.as_retriever(search_kwargs={"k": 20})
         docs = retriever.invoke(query)
         
-        # Group documents by source
         grouped_docs = {}
         for d in docs:
             source = d.metadata.get("source", "Unknown")
@@ -25,7 +23,6 @@ class RAGGraph:
                 grouped_docs[source] = []
             grouped_docs[source].append(d)
             
-        # Interleave documents from different sources
         selected_docs = []
         max_docs_per_source = max(len(v) for v in grouped_docs.values()) if grouped_docs else 0
         
@@ -34,7 +31,6 @@ class RAGGraph:
                 if i < len(grouped_docs[source]):
                     selected_docs.append(grouped_docs[source][i])
                     
-        # Limit to top 5 chunks after diversity filtering
         selected_docs = selected_docs[:5]
 
         sources = []
@@ -75,11 +71,19 @@ class RAGGraph:
         if state.get("steps", 0) > 10: 
              return {"messages": [SystemMessage(content="Step limit reached. Please output FINAL_ANSWER based on what you have found so far. Do not search anymore.")]}
         last_msg = state["messages"][-1].content
-        match = re.search(r'ACTION:\s*search_documents\("(.*)"\)', last_msg)
+        
+        match = re.search(r'ACTION:\s*search_documents\([\'"](.*?)[\'"]\)', last_msg)
+        
         if match:
             q = match.group(1)
-            res = self._retrieve_docs(q)
-            obs = AIMessage(content=f"OBSERVATION: {res['context']}")
+            try:
+                res = self._retrieve_docs(q)
+                obs_content = f"OBSERVATION: {res['context']}"
+            except Exception as e:
+                obs_content = f"OBSERVATION: Error during retrieval: {str(e)}"
+                res = {"sources": []}
+
+            obs = AIMessage(content=obs_content)
             
             current_sources = state.get("sources", [])
             seen = set((s['filename'], s['page'], s['content']) for s in current_sources)
@@ -95,10 +99,11 @@ class RAGGraph:
 
             return {
                 "messages": [obs],
-                "context": (state.get("context", "") + "\n" + res["context"]).strip(),
+                "context": (state.get("context", "") + "\n" + obs_content).strip(),
                 "sources": new_sources
             }
-        return {"messages": []}
+        
+        return {"messages": [AIMessage(content="OBSERVATION: Invalid Action format. You must use exactly: ACTION: search_documents(\"query\")")]}
 
     def _validator(self, state: AgentState):
         ans = state["messages"][-1].content

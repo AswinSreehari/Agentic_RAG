@@ -8,6 +8,6 @@ class Config:
     CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
     CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
     ITERATION_COUNT = int(os.getenv("ITERATION_COUNT", "3"))
-    COLLECTION_NAME = "rag_docs"
-    MODEL_NAME = "llama-3.3-70b-versatile"
-    EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+    COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+    MODEL_NAME = os.getenv("MODEL_NAME")
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")

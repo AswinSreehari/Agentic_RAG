@@ -102,7 +102,7 @@ const ChatInterface = () => {
 
                         } else if (data.type === 'final') {
                             finalRes = data.response;
-                            finalSrc = data.sources || []; // Ensure it's empty array if null
+                            finalSrc = data.sources || [];
                             if (data.conversation_id) {
                                 setConversationId(data.conversation_id);
                             }

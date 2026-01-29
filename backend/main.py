@@ -7,10 +7,13 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
 from dotenv import load_dotenv
+from components.config import Config
 
 from rag_engine import RAGService
 
 load_dotenv()
+
+print(f"Server starting with Collection: {Config.COLLECTION_NAME}")
 
 app = FastAPI(title="RAG Chat Backend")
 
