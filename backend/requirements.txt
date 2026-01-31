@@ -10,8 +10,9 @@ langchain-core==0.1.52
 langchain-community==0.0.32
 langchain-chroma==0.1.2
 langchain-groq==0.1.2
-langchain-huggingface==0.0.3
+langchain-openai==0.0.8
 langgraph==0.0.40
 
 chromadb==0.4.24
 pypdf==4.1.0
+tiktoken==0.6.0

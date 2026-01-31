@@ -1,11 +1,14 @@
 import chromadb
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from .config import Config
 
 class VectorStoreManager:
     def __init__(self):
-        self._embedding_function = HuggingFaceEmbeddings(model_name=Config.EMBEDDING_MODEL)
+        self._embedding_function = OpenAIEmbeddings(
+            model=Config.EMBEDDING_MODEL,
+            openai_api_key=Config.OPENAI_API_KEY
+        )
         try:
             print(f"Connecting to ChromaDB at {Config.CHROMA_HOST}:{Config.CHROMA_PORT}...")
             self._client = chromadb.HttpClient(host=Config.CHROMA_HOST, port=Config.CHROMA_PORT)
