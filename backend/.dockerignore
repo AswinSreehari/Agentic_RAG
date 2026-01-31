@@ -1,0 +1,57 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Environment files (secrets should be passed at runtime)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Temporary files
+temp_uploads/*
+!temp_uploads/.gitkeep
+*.log
+*.tmp
+
+# Database local files
+db/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Documentation
+*.md
+!README.md
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db

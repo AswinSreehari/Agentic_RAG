@@ -32,7 +32,19 @@ class DocumentProcessor:
             if not chunks:
                 return "No content extracted from PDF."
 
-            ids = [str(uuid.uuid4()) for _ in chunks]
+            for i, chunk in enumerate(chunks):
+                chunk.metadata["chunk_id"] = str(uuid.uuid4())
+                chunk.metadata["chunk_index"] = i
+                
+                # Ensure source and page are present (they should be already)
+                if "source" not in chunk.metadata:
+                    chunk.metadata["source"] = original_filename
+                
+                # If page is missing (unlikely), default to 0
+                if "page" not in chunk.metadata:
+                    chunk.metadata["page"] = 0
+
+            ids = [chunk.metadata["chunk_id"] for chunk in chunks]
             self.vector_store.add_documents(documents=chunks, ids=ids)
             return f"Successfully processed {original_filename}."
         except Exception as e:

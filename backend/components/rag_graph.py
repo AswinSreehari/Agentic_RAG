@@ -18,7 +18,7 @@ class RAGGraph:
         
         grouped_docs = {}
         for d in docs:
-            source = d.metadata.get("source", "Unknown")
+            source = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
             if source not in grouped_docs:
                 grouped_docs[source] = []
             grouped_docs[source].append(d)
@@ -41,15 +41,26 @@ class RAGGraph:
             txt = d.page_content.strip()
             if not txt or txt in unique_contents: continue
             unique_contents.add(txt)
-            p = d.metadata.get("page")
             
-            if p is None or not isinstance(p, int) or p <= 0:
+            p = d.metadata.get("page")
+            if p is None:
+                p = d.metadata.get("page_no")
+            
+            if p is None or (isinstance(p, str) and not p.isdigit()) or (isinstance(p, int) and p <= 0):
                 p = 1
                 
-            s = {"filename": d.metadata.get("source", "Unknown"), "page": p, "content": txt}
+            filename = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
+            
+            s = {
+                "filename": filename, 
+                "page": p, 
+                "content": txt,
+                "chunk_id": d.metadata.get("chunk_id"),
+                "chunk_index": d.metadata.get("chunk_index")
+            }
             sources.append(s)
             context += f"\n[File: {s['filename']}, Page: {s['page']}]\n{txt}\n"
-            
+            print(f"Retrieved Doc - File: {s['filename']}, Page: {s['page']}")
         return {"context": context, "sources": sources}
 
     def _agent(self, state: AgentState):
