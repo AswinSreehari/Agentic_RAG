@@ -16,7 +16,6 @@ const ChatInterface = () => {
                 { role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }
             ];
         } catch (e) {
-            console.error("Failed to load history", e);
             return [{ role: 'assistant', content: "Hello! I'm your RAG Agent. Upload a document to get started." }];
         }
     });
@@ -107,12 +106,8 @@ const ChatInterface = () => {
                                 setConversationId(data.conversation_id);
                             }
                             setCurrentStatus("Finished");
-                        } else if (data.type === 'error') {
-                            console.error("Stream Error:", data.content);
                         }
-                    } catch (e) {
-                        console.error("Error parsing JSON:", e);
-                    }
+                    } catch (e) { }
                 }
             }
 
@@ -124,7 +119,6 @@ const ChatInterface = () => {
             setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, something went wrong connecting to the agent." }]);
-            console.error(error);
         } finally {
             setIsLoading(false);
             setIsThinking(false);

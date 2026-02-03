@@ -16,6 +16,7 @@ services:
       - COLLECTION_NAME=${COLLECTION_NAME}
       - MODEL_NAME=${MODEL_NAME}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./temp_uploads:/app/temp_uploads
     restart: unless-stopped

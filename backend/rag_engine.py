@@ -7,7 +7,6 @@ from components.rag_graph import RAGGraph
 import json
 import uuid
 from langchain_core.messages import AIMessage
- 
 
 class RAGService:
     def __init__(self):
@@ -37,7 +36,11 @@ class RAGService:
             if not response_text and final_state.get("messages"):
                 for m in reversed(final_state["messages"]):
                     if isinstance(m, AIMessage) and m.content:
-                        response_text = m.content
+                        content = m.content
+                        if "FINAL_ANSWER:" in content.upper():
+                            response_text = content.split("FINAL_ANSWER:")[-1].strip()
+                        else:
+                            response_text = content
                         break
             
             if not final_state.get("is_valid", True) and final_state.get("retry_count", 0) >= Config.ITERATION_COUNT:
@@ -52,7 +55,6 @@ class RAGService:
             return {"response": f"Error: {str(e)}", "sources": [], "conversation_id": conversation_id}
 
     def query_stream(self, user_query: str, chat_history: List[dict] = [], conversation_id: str = None, username: str = "User"):
-        
         if not self.llm or not self.rag_graph:
             yield json.dumps({"type": "error", "content": "System Error: LLM not initialized."}) + "\n"
             return
@@ -67,13 +69,14 @@ class RAGService:
             final_sources = []
             is_valid = False
             retry_count = 0
+            last_ai_message = ""
             
             for event in stream:
                 for node, values in event.items():
                     if "messages" in values:
                         for m in values["messages"]:
                             if isinstance(m, AIMessage) and m.content:
-                                print(f"[THINKING]: {m.content}")
+                                last_ai_message = m.content
                                 yield json.dumps({"type": "thinking", "content": m.content}) + "\n"
                     
                     if "response" in values:
@@ -88,13 +91,18 @@ class RAGService:
                     if "retry_count" in values: 
                          retry_count = values["retry_count"]
             
+            if not final_response and last_ai_message:
+                if "FINAL_ANSWER:" in last_ai_message.upper():
+                    final_response = last_ai_message.split("FINAL_ANSWER:")[-1].strip()
+                elif "ACTION:" not in last_ai_message.upper() and "OBSERVATION:" not in last_ai_message.upper():
+                    final_response = last_ai_message
+
             if not is_valid and retry_count >= Config.ITERATION_COUNT:
                 final_response = "There is no relevant information in the given data to answer your query accurately."
             
             if not final_response:
-                final_response = "I couldn't generate a response. Please try again."
+                final_response = "I couldn't generate a response. Please try again or check the documentation."
 
-            print(f"[FINAL]: {final_response}")
             yield json.dumps({
                 "type": "final",
                 "response": final_response,
@@ -104,3 +112,9 @@ class RAGService:
 
         except Exception as e:
             yield json.dumps({"type": "error", "content": str(e)}) + "\n"
+            yield json.dumps({
+                "type": "final",
+                "response": f"Sorry, an error occurred: {str(e)}",
+                "sources": [],
+                "conversation_id": conversation_id
+            }) + "\n"

@@ -1,9 +1,7 @@
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from .state import AgentState
 from .config import Config
-import json
 import re
 
 class RAGGraph:
@@ -13,55 +11,51 @@ class RAGGraph:
         self.graph = self._build_graph()
 
     def _retrieve_docs(self, query: str):
-        retriever = self.vector_store.as_retriever(search_kwargs={"k": 20})
-        docs = retriever.invoke(query)
-        
-        grouped_docs = {}
-        for d in docs:
-            source = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
-            if source not in grouped_docs:
-                grouped_docs[source] = []
-            grouped_docs[source].append(d)
+        try:
+            retriever = self.vector_store.as_retriever(search_kwargs={"k": 20})
+            docs = retriever.invoke(query)
             
-        selected_docs = []
-        max_docs_per_source = max(len(v) for v in grouped_docs.values()) if grouped_docs else 0
-        
-        for i in range(max_docs_per_source):
-            for source in grouped_docs:
-                if i < len(grouped_docs[source]):
-                    selected_docs.append(grouped_docs[source][i])
-                    
-        selected_docs = selected_docs[:5]
-
-        sources = []
-        unique_contents = set()
-        context = ""
-        
-        for d in selected_docs:
-            txt = d.page_content.strip()
-            if not txt or txt in unique_contents: continue
-            unique_contents.add(txt)
-            
-            p = d.metadata.get("page")
-            if p is None:
-                p = d.metadata.get("page_no")
-            
-            if p is None or (isinstance(p, str) and not p.isdigit()) or (isinstance(p, int) and p <= 0):
-                p = 1
+            grouped_docs = {}
+            for d in docs:
+                source = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
+                if source not in grouped_docs:
+                    grouped_docs[source] = []
+                grouped_docs[source].append(d)
                 
-            filename = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
+            selected_docs = []
+            max_docs_per_source = max(len(v) for v in grouped_docs.values()) if grouped_docs else 0
             
-            s = {
-                "filename": filename, 
-                "page": p, 
-                "content": txt,
-                "chunk_id": d.metadata.get("chunk_id"),
-                "chunk_index": d.metadata.get("chunk_index")
-            }
-            sources.append(s)
-            context += f"\n[File: {s['filename']}, Page: {s['page']}]\n{txt}\n"
-            print(f"Retrieved Doc - File: {s['filename']}, Page: {s['page']}")
-        return {"context": context, "sources": sources}
+            for i in range(max_docs_per_source):
+                for source in grouped_docs:
+                    if i < len(grouped_docs[source]):
+                        selected_docs.append(grouped_docs[source][i])
+                        
+            selected_docs = selected_docs[:5]
+
+            sources = []
+            unique_contents = set()
+            context = ""
+            
+            for d in selected_docs:
+                txt = d.page_content.strip()
+                if not txt or txt in unique_contents: continue
+                unique_contents.add(txt)
+                
+                p = d.metadata.get("page") or d.metadata.get("page_no") or 1
+                filename = d.metadata.get("source") or d.metadata.get("doc_name") or "Unknown"
+                
+                s = {
+                    "filename": filename, 
+                    "page": p, 
+                    "content": txt,
+                    "chunk_id": d.metadata.get("chunk_id"),
+                    "chunk_index": d.metadata.get("chunk_index")
+                }
+                sources.append(s)
+                context += f"\n[File: {s['filename']}, Page: {s['page']}]\n{txt}\n"
+            return {"context": context, "sources": sources}
+        except Exception as e:
+            return {"context": "", "sources": []}
 
     def _agent(self, state: AgentState):
         messages = list(state["messages"])
@@ -71,36 +65,30 @@ class RAGGraph:
             messages.insert(0, SystemMessage(content=(
                 f"You are an expert ReAct Agent assisting {username}. To answer, you MUST search documents first. "
                 "Current Strategy: \n"
-                "1. If you need info (which you usually do), output: ACTION: search_documents(\"query\")\n"
-                "2. If you have sufficient info from OBSERVATIONS, output: FINAL_ANSWER: your clean response\n"
-                "Constraint: FINAL_ANSWER must be clean, grounded in context, and have NO inline citations."
+                "1. If you need info, output: ACTION: search_documents(\"query\")\n"
+                "2. If you have sufficient info, output: FINAL_ANSWER: your response\n"
+                "Constraint: FINAL_ANSWER must be grounded in context."
             )))
         res = self.llm.invoke(messages)
         return {"messages": [res], "steps": state.get("steps", 0) + 1}
 
     def _tool_executor(self, state: AgentState):
         if state.get("steps", 0) > 10: 
-             return {"messages": [SystemMessage(content="Step limit reached. Please output FINAL_ANSWER based on what you have found so far. Do not search anymore.")]}
+             return {"messages": [SystemMessage(content="Limit reached. Output FINAL_ANSWER now.")]}
+             
         last_msg = state["messages"][-1].content
-        
-        match = re.search(r'ACTION:\s*search_documents\([\'"](.*?)[\'"]\)', last_msg)
+        match = re.search(r'ACTION:\s*search_documents\([\'"](.*?)[\'"]\)', last_msg, re.IGNORECASE)
         
         if match:
             q = match.group(1)
-            try:
-                res = self._retrieve_docs(q)
-                obs_content = f"OBSERVATION: {res['context']}"
-            except Exception as e:
-                obs_content = f"OBSERVATION: Error during retrieval: {str(e)}"
-                res = {"sources": []}
-
+            res = self._retrieve_docs(q)
+            obs_content = f"OBSERVATION: {res['context']}" if res['context'] else "OBSERVATION: No relevant documents found."
+            
             obs = AIMessage(content=obs_content)
             
             current_sources = state.get("sources", [])
             seen = set((s['filename'], s['page'], s['content']) for s in current_sources)
-            new_sources = []
-            for s in current_sources:
-                new_sources.append(s)
+            new_sources = list(current_sources)
             
             for s in res["sources"]:
                 key = (s['filename'], s['page'], s['content'])
@@ -114,15 +102,25 @@ class RAGGraph:
                 "sources": new_sources
             }
         
-        return {"messages": [AIMessage(content="OBSERVATION: Invalid Action format. You must use exactly: ACTION: search_documents(\"query\")")]}
+        return {"messages": [AIMessage(content="OBSERVATION: Invalid format. Use ACTION: search_documents(\"query\")")]}
 
     def _validator(self, state: AgentState):
         ans = state["messages"][-1].content
-        if "FINAL_ANSWER:" in ans:
-            clean_ans = ans.split("FINAL_ANSWER:")[-1].strip()
+        
+        clean_ans = None
+        if "FINAL_ANSWER:" in ans.upper():
+            parts = re.split(r'FINAL_ANSWER:', ans, flags=re.IGNORECASE)
+            clean_ans = parts[-1].strip()
+        elif state.get("steps", 0) > 5:
+            clean_ans = ans.strip()
+
+        if clean_ans:
             v_prompt = f"Context: {state['context']}\nResponse: {clean_ans}\nReply 'VALID' or 'INVALID' only."
-            v_res = self.llm.invoke([HumanMessage(content=v_prompt)])
-            is_valid = "VALID" in v_res.content.upper()
+            try:
+                v_res = self.llm.invoke([HumanMessage(content=v_prompt)])
+                is_valid = "VALID" in v_res.content.upper()
+            except:
+                is_valid = True
             
             return {
                 "is_valid": is_valid, 
@@ -130,16 +128,22 @@ class RAGGraph:
                 "sources": state.get("sources", []), 
                 "retry_count": state.get("retry_count", 0) + (0 if is_valid else 1)
             }
-        return {"is_valid": False}
+        
+        return {
+            "is_valid": False,
+            "retry_count": state.get("retry_count", 0) + 1
+        }
 
     def _router(self, state: AgentState):
         last_msg = state["messages"][-1].content
-        if "FINAL_ANSWER:" in last_msg: return "validate"
-        if "ACTION:" in last_msg: return "action"
+        if "FINAL_ANSWER:" in last_msg.upper(): return "validate"
+        if "ACTION:" in last_msg.upper(): return "action"
+        if state.get("steps", 0) > 5: return "validate"
         return "validate" 
 
     def _retry_logic(self, state: AgentState):
-        if state["is_valid"] or state["retry_count"] >= Config.ITERATION_COUNT: return "end"
+        if state.get("is_valid") or state.get("retry_count", 0) >= Config.ITERATION_COUNT: 
+            return "end"
         return "agent"
 
     def _build_graph(self):
@@ -158,42 +162,23 @@ class RAGGraph:
         for m in chat_history:
             if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
             elif m.get("role") == "assistant": msgs.append(AIMessage(content=m["content"]))
-            
         msgs.append(HumanMessage(content=query))
+        
         init = {
-            "query": query, 
-            "messages": msgs, 
-            "context": "", 
-            "response": "", 
-            "is_valid": False, 
-            "retry_count": 0, 
-            "sources": [],
-            "username": username
+            "query": query, "messages": msgs, "context": "", "response": "", 
+            "is_valid": False, "retry_count": 0, "sources": [], "username": username, "steps": 0
         }
-        
-        final = self.graph.invoke(init)
-        
-        if not final.get("is_valid") and final.get("retry_count", 0) >= Config.ITERATION_COUNT:
-            final["response"] = "There is no relevant information in the given data"
-            final["sources"] = []
-        return final
+        return self.graph.invoke(init)
 
     def run_stream(self, query: str, chat_history: list, username: str = "User", thread_id: str = "default"):
         msgs = []
         for m in chat_history:
             if m.get("role") == "user": msgs.append(HumanMessage(content=m["content"]))
             elif m.get("role") == "assistant": msgs.append(AIMessage(content=m["content"]))
-            
         msgs.append(HumanMessage(content=query))
-        init = {
-            "query": query, 
-            "messages": msgs, 
-            "context": "", 
-            "response": "", 
-            "is_valid": False, 
-            "retry_count": 0, 
-            "sources": [],
-            "username": username
-        }
         
+        init = {
+            "query": query, "messages": msgs, "context": "", "response": "", 
+            "is_valid": False, "retry_count": 0, "sources": [], "username": username, "steps": 0
+        }
         return self.graph.stream(init)

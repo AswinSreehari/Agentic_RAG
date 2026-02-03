@@ -13,8 +13,6 @@ from rag_engine import RAGService
 
 load_dotenv()
 
-print(f"Server starting with Collection: {Config.COLLECTION_NAME}")
-
 app = FastAPI(title="RAG Chat Backend")
 
 app.add_middleware(
@@ -79,7 +77,6 @@ async def chat_endpoint(request: ChatRequest):
             return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
